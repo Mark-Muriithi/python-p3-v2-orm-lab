@@ -1,12 +1,10 @@
 from __init__ import CONN, CURSOR
-from employee import Employee
 from department import Department
-from faker import Faker
 import pytest
 
 
-class TestEmployee:
-    '''Class Employee in employee.py'''
+class TestDepartment:
+    '''Class Department in department.py'''
 
     @pytest.fixture(autouse=True)
     def drop_tables(self):
@@ -14,286 +12,221 @@ class TestEmployee:
 
         CURSOR.execute("DROP TABLE IF EXISTS employees")
         CURSOR.execute("DROP TABLE IF EXISTS departments")
-        
         Department.all = {}
-        Employee.all = {}
-        
-    def test_creates_table(self):
-        '''contains method "create_table()" that creates table "employees" if it does not exist.'''
 
-        Department.create_table()  # ensure Department table exists due to FK constraint
-        Employee.create_table()
-        assert (CURSOR.execute("SELECT * FROM employees"))
+    def test_creates_table(self):
+        '''contains method "create_table()" that creates table "departments" if it does not exist.'''
+
+        Department.create_table()
+        assert (CURSOR.execute("SELECT * FROM departments"))
 
     def test_drops_table(self):
-        '''contains method "drop_table()" that drops table "employees" if it exists.'''
+        '''contains method "drop_table()" that drops table "departments" if it exists.'''
 
         sql = """
-            CREATE TABLE IF NOT EXISTS departments
-                (id INTEGER PRIMARY KEY,
-                name TEXT,
-                location TEXT)
-        """
-        CURSOR.execute(sql)
-
-        sql = """  
-            CREATE TABLE IF NOT EXISTS employees (
+            CREATE TABLE IF NOT EXISTS departments (
             id INTEGER PRIMARY KEY,
             name TEXT,
-            job_title TEXT,
-            department_id INTEGER,
-            FOREIGN KEY (department_id) REFERENCES departments(id))
+            location TEXT)
         """
         CURSOR.execute(sql)
+        CONN.commit()
 
-        Employee.drop_table()
+        Department.drop_table()
 
-        # Confirm departments table exists
         sql_table_names = """
             SELECT name FROM sqlite_master
             WHERE type='table' AND name='departments'
-            LIMIT 1
-        """
-        result = CURSOR.execute(sql_table_names).fetchone()
-        assert (result)
-
-        # Confirm employees table does not exist
-        sql_table_names = """
-            SELECT name FROM sqlite_master
-            WHERE type='table' AND name='employees'
-            LIMIT 1
         """
         result = CURSOR.execute(sql_table_names).fetchone()
         assert (result is None)
 
-    def test_saves_employee(self):
-        '''contains method "save()" that saves an Employee instance to the db and sets the instance id.'''
+    def test_saves_department(self):
+        '''contains method "save()" that saves a Department instance to the db and assigns the instance an id.'''
 
         Department.create_table()
         department = Department("Payroll", "Building A, 5th Floor")
-        department.save()  # tested in department_test.py
-
-        Employee.create_table()
-        employee = Employee("Sasha", "Manager", department.id)
-        employee.save()
+        department.save()
 
         sql = """
-            SELECT * FROM employees
+            SELECT * FROM departments
         """
-
         row = CURSOR.execute(sql).fetchone()
-        assert ((row[0], row[1], row[2], row[3]) ==
-                (employee.id, employee.name, employee.job_title, employee.department_id) ==
-                (employee.id, "Sasha", "Manager", department.id))
+        assert ((row[0], row[1], row[2]) ==
+                (department.id, department.name, department.location) ==
+                (row[0], "Payroll", "Building A, 5th Floor"))
 
-    def test_creates_employee(self):
-        '''contains method "create()" that creates a new row in the db using the parameter data and returns an Employee instance.'''
+    def test_creates_department(self):
+        '''contains method "create()" that creates a new row in the db using parameter data and returns a Department instance.'''
 
         Department.create_table()
-        department = Department("Payroll", "Building A, 5th Floor")
-        department.save()  # tested in department_test.py
-
-        Employee.create_table()
-        employee = Employee.create("Kai", "Web Developer", department.id)
+        department = Department.create("Payroll", "Building A, 5th Floor")
 
         sql = """
-            SELECT * FROM employees
+            SELECT * FROM departments
         """
         row = CURSOR.execute(sql).fetchone()
-        assert ((row[0], row[1], row[2], row[3]) ==
-                (employee.id, employee.name, employee.job_title, employee.department_id) ==
-                (employee.id, "Kai", "Web Developer", department.id))
+        assert ((row[0], row[1], row[2]) ==
+                (department.id, department.name, department.location) ==
+                (row[0], "Payroll", "Building A, 5th Floor"))
 
     def test_instance_from_db(self):
-        '''contains method "instance_from_db()" that takes a db row and creates an Employee instance.'''
+        '''contains method "instance_from_db()" that takes a table row and returns a Department instance.'''
 
         Department.create_table()
-        department = Department("Payroll", "Building A, 5th Floor")
-        department.save()  # tested in department_test.py
-
-        Employee.create_table()
-        sql = """
-            INSERT INTO employees (name, job_title, department_id)
-            VALUES ('Amir', 'Programmer', ?)
-        """
-        CURSOR.execute(sql, (department.id,))
+        Department.create("Payroll", "Building A, 5th Floor")
 
         sql = """
-            SELECT * FROM employees
+            SELECT * FROM departments
         """
         row = CURSOR.execute(sql).fetchone()
+        department = Department.instance_from_db(row)
 
-        employee = Employee.instance_from_db(row)
-        assert ((row[0], row[1], row[2], row[3]) ==
-                (employee.id, employee.name, employee.job_title, employee.department_id) ==
-                (employee.id, "Amir", "Programmer", department.id))
+        assert ((row[0], row[1], row[2]) ==
+                (department.id, department.name, department.location) ==
+                (row[0], "Payroll", "Building A, 5th Floor"))
 
     def test_finds_by_id(self):
-        '''contains method "find_by_id()" that returns a Employee instance corresponding to its db row retrieved by id.'''
+        '''contains method "find_by_id()" that returns a Department instance corresponding to the db row retrieved by id.'''
 
         Department.create_table()
-        department = Department("Payroll", "Building A, 5th Floor")
-        department.save()
-        Employee.create_table()
-        faker = Faker()
-        employee1 = Employee.create(faker.name(), "Manager", department.id)
-        employee2 = Employee.create(
-            faker.name(), "Web Developer", department.id)
+        department1 = Department.create(
+            "Human Resources", "Building C, East Wing")
+        department2 = Department.create("Marketing", "Building B, 3rd Floor")
 
-        employee = Employee.find_by_id(employee1.id)
+        department = Department.find_by_id(department1.id)
         assert (
-            (employee.id, employee.name, employee.job_title, employee.department_id) ==
-            (employee1.id, employee1.name,
-             employee1.job_title, employee1.department_id)
+            (department.id, department.name, department.location) ==
+            (department1.id, "Human Resources", "Building C, East Wing")
         )
-
-        employee = Employee.find_by_id(employee2.id)
+        department = Department.find_by_id(department2.id)
         assert (
-            (employee.id, employee.name, employee.job_title, employee.department_id) ==
-            (employee2.id, employee2.name,
-             employee2.job_title, employee2.department_id)
+            (department.id, department.name, department.location) ==
+            (department2.id, "Marketing", "Building B, 3rd Floor")
         )
-
-        employee = Employee.find_by_id(3)
-        assert (employee is None)
+        department = Department.find_by_id(0)
+        assert (department is None)
 
     def test_finds_by_name(self):
-        '''contains method "find_by_name()" that returns an Employee instance corresponding to the db row retrieved by name.'''
+        '''contains method "find_by_name()" that returns a Department instance corresponding to the db row retrieved by name.'''
 
         Department.create_table()
-        department = Department("Payroll", "Building A, 5th Floor")
-        department.save()
-        Employee.create_table()
-        faker = Faker()
-        employee1 = Employee.create(faker.name(), "Manager", department.id)
-        employee2 = Employee.create(
-            faker.name(), "Web Developer", department.id)
+        department1 = Department.create(
+            "Human Resources", "Building C, East Wing")
+        department2 = Department.create("Marketing", "Building B, 3rd Floor")
 
-        employee = Employee.find_by_name(employee1.name)
+        department = Department.find_by_name("Human Resources")
         assert (
-            (employee.id, employee.name, employee.job_title, employee.department_id) ==
-            (employee1.id, employee1.name,
-             employee1.job_title, employee1.department_id)
+            (department.id, department.name, department.location) ==
+            (department1.id, "Human Resources", "Building C, East Wing")
         )
-        employee = Employee.find_by_name(employee2.name)
-        assert (
-            (employee.id, employee.name, employee.job_title, employee.department_id) ==
-            (employee2.id, employee2.name,
-             employee2.job_title, employee2.department_id)
-        )
-        employee = Employee.find_by_name("Unknown")
-        assert (employee is None)
 
- 
+        department = Department.find_by_name("Marketing")
+        assert (
+            (department.id, department.name, department.location) ==
+            (department2.id, "Marketing", "Building B, 3rd Floor")
+        )
+        department = Department.find_by_name("Unknown")
+        assert (department is None)
 
     def test_updates_row(self):
-        '''contains a method "update()" that updates an instance's corresponding database record to match its new attribute values.'''
-
+        '''contains a method "update()" that updates an instance's corresponding db row to match its new attribute values.'''
         Department.create_table()
-        department1 = Department("Payroll", "Building A, 5th Floor")
-        department1.save()
-        department2 = Department("Human Resources", "Building C, 2nd Floor")
-        department2.save()
 
-        Employee.create_table()
+        department1 = Department.create(
+            "Human Resources", "Building C, East Wing")
+        id1 = department1.id
+        department2 = Department.create("Marketing", "Building B, 3rd Floor")
+        id2 = department2.id
 
-        employee1 = Employee.create("Raha", "Accountant", department1.id)
-        employee2 = Employee.create(
-            "Tal", "Benefits Coordinator", department2.id)
-        id1 = employee1.id
-        id2 = employee2.id
-        employee1.name = "Raha Lee"
-        employee1.job_title = "Senior Accountant"
-        employee1.department_id = department2.id
-        employee1.update()
+        # Assign new values for name and location
+        department2.name = "Sales and Marketing"
+        department2.location = "Building B, 4th Floor"
 
-        # Confirm employee updated
-        employee = Employee.find_by_id(id1)
-        assert ((employee.id, employee.name, employee.job_title, employee.department_id) ==
-                (employee1.id, employee1.name, employee1.job_title, employee1.department_id) ==
-                (id1, "Raha Lee", "Senior Accountant", department2.id))
+        # Persist the updated name and location values
+        department2.update()
 
-        # Confirm employee not updated
-        employee = Employee.find_by_id(id2)
-        assert ((employee.id, employee.name, employee.job_title, employee.department_id) ==
-                (employee2.id, employee2.name, employee2.job_title, employee2.department_id) ==
-                (id2, "Tal", "Benefits Coordinator", department2.id))
+        # assert department1 row was not updated, department1 object state not updated
+        # assert row not updated
+        department = Department.find_by_id(id1)
+        assert ((department.id, department.name, department.location)
+                == (id1, "Human Resources", "Building C, East Wing")
+                == (department1.id, department1.name, department1.location))
+
+        # assert department2 row was updated, department2 object state is correct
+        department = Department.find_by_id(id2)
+        assert ((department.id, department.name, department.location)
+                == (id2, "Sales and Marketing", "Building B, 4th Floor")
+                == (department2.id, department2.name, department2.location))
 
     def test_deletes_row(self):
-        '''contains a method "delete()" that deletes the instance's corresponding database record'''
+        '''contains a method "delete()" that deletes the instance's corresponding db row'''
         Department.create_table()
-        department = Department("Payroll", "Building A, 5th Floor")
-        department.save()
 
-        Employee.create_table()
+        department1 = Department.create(
+            "Human Resources", "Building C, East Wing")
+        id1 = department1.id
+        department2 = Department.create(
+            "Sales and Marketing", "Building B, 4th Floor")
+        id2 = department2.id
 
-        employee1 = Employee.create("Raha", "Accountant", department.id)
-        id1 = employee1.id
-        employee2 = Employee.create(
-            "Tal", "Benefits Coordinator", department.id)
-        id2 = employee2.id
+        department2.delete()
 
-        employee = Employee.find_by_id(id1)
-        employee.delete()
-        # assert row deleted
-        assert (Employee.find_by_id(employee1.id) is None)
-        # assert Employee object state is correct, id should be None
-        assert ((employee1.id, employee1.name, employee1.job_title, employee1.department_id) ==
-                (None, "Raha", "Accountant", department.id))
+        # assert department1 row was not deleted, department1 object state is correct
+        department = Department.find_by_id(id1)
+        assert ((department.id, department.name, department.location)
+                == (id1, "Human Resources", "Building C, East Wing")
+                == (department1.id, department1.name, department1.location))
+
+        # assert department2 row is deleted
+        assert (Department.find_by_id(id2) is None)
+        # assert department2 object state is correct, id should be None
+        assert ((None, "Sales and Marketing", "Building B, 4th Floor")
+                == (department2.id, department2.name, department2.location))
         # assert dictionary entry was deleted
-        assert(Employee.all.get(id1) is None)
-        
-        employee = Employee.find_by_id(id2)
-        # assert employee2 row not modified, employee2 object not modified
-        assert ((employee.id, employee.name, employee.job_title, employee.department_id) ==
-                (employee2.id, employee2.name, employee2.job_title, employee2.department_id) ==
-                (id2, "Tal", "Benefits Coordinator", department.id))
+        assert(Department.all.get(id2) is None)
 
-
-
+    
     def test_gets_all(self):
-        '''contains method "get_all()" that returns a list of Employee instances for every record in the db.'''
+        '''contains method "get_all()" that returns a list of Department instances for every row in the db.'''
 
         Department.create_table()
-        department = Department("Payroll", "Building A, 5th Floor")
-        department.save()
+
+        department1 = Department.create(
+            "Human Resources", "Building C, East Wing")
+        department2 = Department.create("Marketing", "Building B, 3rd Floor")
+
+        departments = Department.get_all()
+
+        assert (len(departments) == 2)
+        assert (
+            (departments[0].id, departments[0].name, departments[0].location) ==
+            (department1.id, "Human Resources", "Building C, East Wing"))
+        assert ((departments[1].id, departments[1].name, departments[1].location) ==
+                (department2.id, "Marketing", "Building B, 3rd Floor")
+                )
+
+    
+    def test_get_employees(self):
+        '''contain a method "employees" that gets the employees for the current Department instance '''
+
+        from employee import Employee  # avoid circular import issue
+        Employee.all = {}
+
+        Department.create_table()
+        department1 = Department.create("Payroll", "Building A, 5th Floor")
+        department2 = Department.create(
+            "Human Resources", "Building C, 2nd Floor")
 
         Employee.create_table()
-        employee1 = Employee.create(
-            "Tristan", "Fullstack Developer", department.id)
-        employee2 = Employee.create("Sasha", "Manager", department.id)
+        employee1 = Employee.create("Raha", "Accountant", department1.id)
+        employee2 = Employee.create(
+            "Tal", "Senior Accountant", department1.id)
+        employee3 = Employee.create("Amir", "Manager", department2.id)
 
-        employees = Employee.get_all()
+        employees = department1.employees()
         assert (len(employees) == 2)
         assert ((employees[0].id, employees[0].name, employees[0].job_title, employees[0].department_id) ==
                 (employee1.id, employee1.name, employee1.job_title, employee1.department_id))
         assert ((employees[1].id, employees[1].name, employees[1].job_title, employees[1].department_id) ==
                 (employee2.id, employee2.name, employee2.job_title, employee2.department_id))
-
-    def test_get_reviews(self):
-        '''contain a method "reviews" that gets the reviews for the current Employee instance '''
-
-        from review import Review  # avoid circular import issue
-        Review.all = {}
-        CURSOR.execute("DROP TABLE IF EXISTS reviews")
-
-
-        Department.create_table()
-        department1 = Department.create("Payroll", "Building A, 5th Floor")
-        
-        Employee.create_table()
-        employee1 = Employee.create("Raha", "Accountant", department1.id)
-        employee2 = Employee.create(
-            "Tal", "Senior Accountant", department1.id)
-        
-        Review.create_table()
-        review1 = Review.create(2022, "Good Python coding skills", employee1.id)
-        review2 = Review.create(2023, "Great Python coding skills", employee1.id)
-        review3 = Review.create(2022, "Good SQL coding skills", employee2.id)
-        
-        reviews = employee1.reviews()
-        assert (len(reviews) == 2)
-        assert ((reviews[0].id, reviews[0].year, reviews[0].summary, reviews[0].employee_id) ==
-                (review1.id, review1.year, review1.summary, review1.employee_id))
-        assert ((reviews[1].id, reviews[1].year, reviews[1].summary, reviews[1].employee_id) ==
-                (review2.id, review2.year, review2.summary, review2.employee_id))
